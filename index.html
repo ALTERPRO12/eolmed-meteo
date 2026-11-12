@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EolMed MetOcean Live — carte & comparaison des modèles</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{--navy:#1B3A8C;--navyd:#12285F;--red:#D4321A;--sky:#E8EEF8;--grey:#F4F6FA;--line:#C9D3E6;--text:#1E2433;--muted:#6B7385;
+        --g:#2E9E50;--gbg:#D3EFD9;--a:#E9A100;--abg:#FFE3A8;--r:#D4321A;--rbg:#F7B9B0}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--text);background:#fff}
+  header{background:var(--navy);color:#fff;padding:10px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:4px solid var(--red)}
+  header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.2px}
+  header .sub{font-size:12px;opacity:.85}
+  header .right{margin-left:auto;font-size:12px;opacity:.9;text-align:right}
+  main{padding:14px 18px;max-width:1500px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px}
+  @media(max-width:1100px){.grid{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+  .card h2{font-size:13px;margin:0;padding:9px 12px;background:var(--grey);border-bottom:1px solid var(--line);color:var(--navy);text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;gap:8px}
+  .card h2 .hint{margin-left:auto;text-transform:none;letter-spacing:0;color:var(--muted);font-weight:400;font-size:11px}
+  .pad{padding:10px 12px}
+  .btns{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line)}
+  .btns .lab{font-size:11px;color:var(--muted);align-self:center;margin-right:2px;min-width:52px}
+  button.chip{border:1px solid var(--line);background:#fff;color:var(--text);border-radius:14px;padding:4px 10px;font-size:12px;cursor:pointer}
+  button.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  #windy{width:100%;height:560px;border:0;display:block}
+  .strip{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .strip div{height:26px;font-size:9px;display:flex;align-items:center;justify-content:center;color:#333}
+  .daylab{display:grid;font-size:10px;color:var(--muted);margin-top:3px}
+  .legend{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;margin:0 3px 0 8px}
+  table{border-collapse:collapse;width:100%;font-size:12px}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:var(--sky);color:var(--navy);font-weight:600}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+  .kpi{border-top:3px solid var(--navy);background:var(--grey);padding:6px 8px;border-radius:0 0 4px 4px}
+  .kpi .t{font-size:10px;color:var(--muted);text-transform:uppercase}
+  .kpi .v{font-size:20px;font-weight:700}
+  .kpi .s{font-size:11px;color:var(--muted)}
+  .chartbox{position:relative;height:250px}
+  .muted{color:var(--muted)} .small{font-size:11px}
+  .err{background:var(--rbg);color:#8E1B0E;padding:8px 12px;font-size:12px;display:none}
+  footer{font-size:11px;color:var(--muted);padding:10px 18px 20px;max-width:1500px;margin:0 auto}
+  a{color:var(--navy)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>EolMed MetOcean Live</h1>
+    <div class="sub">Site EolMed — 43.023°N 3.320°E · au large de Gruissan & Port-La Nouvelle</div>
+  </div>
+  <div class="right">
+    <div id="updated">Chargement des prévisions…</div>
+    <div>Actualisation automatique toutes les 30 min · <a href="#" id="refresh" style="color:#fff">actualiser</a></div>
+  </div>
+</header>
+
+<main>
+  <div class="grid">
+    <!-- CARTE -->
+    <section class="card">
+      <h2>Carte animée <span class="hint">source Windy.com · cliquer sur la carte pour le détail d'un point</span></h2>
+      <div class="btns" id="overlayBtns"><span class="lab">Couche</span></div>
+      <div class="btns" id="productBtns"><span class="lab">Modèle</span></div>
+      <iframe id="windy" title="Carte Windy" loading="lazy"></iframe>
+    </section>
+
+    <!-- DROITE -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <section class="card">
+        <h2>Prochaines 72 h sur le site <span class="hint">vert = tous seuils OK</span></h2>
+        <div class="pad">
+          <div class="kpis" id="kpis"></div>
+          <div class="strip" id="strip"></div>
+          <div class="daylab" id="daylab"></div>
+          <div class="legend">
+            Seuils : Hs &lt; 1,5 m · rafale 10 m &lt; 15 m/s · foudre (CAPE ≥ 1000 J/kg ou code orage).
+            <span class="sw" style="background:var(--gbg)"></span>OK
+            <span class="sw" style="background:var(--abg)"></span>≥ 80 % d'un seuil
+            <span class="sw" style="background:var(--rbg)"></span>seuil atteint
+            <span class="sw" style="background:#E5E8EF"></span>nuit (grisé)<br>
+            Même logique que le rapport PDF ; vent : AROME HD → AROME → ECMWF selon l'échéance.
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Vent 10 m — comparaison des modèles <span class="hint">m/s · trait plein = vent moyen, pointillé = rafales</span></h2>
+        <div class="pad"><div class="chartbox"><canvas id="cWind"></canvas></div>
+          <div class="small muted" id="spread"></div></div>
+      </section>
+
+      <section class="card">
+        <h2>Mer — hauteur significative Hs <span class="hint">m · Météo-France MFWAM</span></h2>
+        <div class="pad"><div class="chartbox" style="height:200px"><canvas id="cWave"></canvas></div></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="err" id="err"></div>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Modèles utilisés</h2>
+    <div class="pad" style="padding:0">
+      <table>
+        <tr><th>Modèle</th><th>Fournisseur</th><th>Maille</th><th>Échéance</th><th>Mise à jour</th><th>Usage ici</th></tr>
+        <tr><td><b>AROME France HD</b></td><td>Météo-France</td><td>~1,5 km</td><td>~2 jours, horaire</td><td>toutes les 3 h</td><td>Référence côtière 0–48 h (rapport + graphique)</td></tr>
+        <tr><td><b>AROME France</b></td><td>Météo-France</td><td>~2,5 km</td><td>~2 jours, horaire</td><td>toutes les 3 h</td><td>Secours AROME HD, comparaison</td></tr>
+        <tr><td><b>ECMWF IFS HRES</b></td><td>ECMWF (Centre européen)</td><td>~9 km</td><td>jusqu'à 15 jours (horaire jusqu'à 90 h)</td><td>toutes les 6 h</td><td>Référence moyen terme (au-delà de 48 h)</td></tr>
+        <tr><td>ICON (DWD)</td><td>Météo allemande</td><td>2–11 km</td><td>~7 jours</td><td>toutes les 3–6 h</td><td>Comparaison (accord des modèles)</td></tr>
+        <tr><td>GFS (NOAA)</td><td>Météo américaine</td><td>~13–25 km</td><td>16 jours</td><td>toutes les 6 h</td><td>Comparaison (accord des modèles)</td></tr>
+        <tr><td><b>MFWAM</b></td><td>Météo-France</td><td>~8 km</td><td>~10 jours</td><td>toutes les 12 h</td><td>Vagues, houle (rapport + graphique)</td></tr>
+      </table>
+      <div class="pad small muted">Lecture : quand les courbes des modèles sont proches, la prévision est fiable ; quand elles s'écartent, l'incertitude est forte — se méfier d'un GO éloigné dans le temps.
+        La carte Windy propose ses propres modèles (ECMWF, GFS, ICON…) ; les couleurs et arrondis peuvent légèrement différer du rapport.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Aide à la décision automatique — ne remplace pas l'avis d'un météorologue ; la décision de sortie reste au coordinateur marine.
+  Données : <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> (Météo-France, ECMWF, DWD, NOAA — CC BY 4.0) · carte <a href="https://www.windy.com" target="_blank">Windy.com</a>.
+  Retours : nicolasdalmon@alterproject.fr
+</footer>
+
+<script>
+const LAT = 43.023, LON = 3.32, TZ = "Europe/Paris";
+const LIM = {hs:1.5, wg10:15, cape:1000};
+const WARN = 0.8;
+
+// ---------------- Carte Windy ----------------
+const OVERLAYS = [["wind","Vent"],["gust","Rafales"],["waves","Vagues"],["swell1","Houle"],["rain","Pluie"],["thunder","Orages"],["cape","CAPE"],["visibility","Visibilité"],["currents","Courants"]];
+const PRODUCTS = [["ecmwf","ECMWF"],["iconEu","ICON-EU"],["gfs","GFS"],["arome","AROME"]];
+let overlay = "wind", product = "ecmwf";
+function windyUrl(){
+  const p = new URLSearchParams({type:"map",location:"coordinates",metricRain:"mm",metricTemp:"°C",metricWind:"m/s",
+    zoom:"8",overlay,product,level:"surface",lat:"43.05",lon:"3.45",detailLat:String(LAT),detailLon:String(LON),
+    detail:"true",marker:"true",message:"true",calendar:"now",pressure:"true"});
+  return "https://embed.windy.com/embed.html?" + p.toString();
+}
+function buildChips(id, list, get, set){
+  const box = document.getElementById(id);
+  list.forEach(([k,lab])=>{
+    const b=document.createElement("button"); b.className="chip"+(get()===k?" on":""); b.textContent=lab;
+    b.onclick=()=>{set(k); [...box.querySelectorAll("button")].forEach(x=>x.classList.remove("on")); b.classList.add("on");
+      document.getElementById("windy").src = windyUrl();};
+    box.appendChild(b);
+  });
+}
+buildChips("overlayBtns", OVERLAYS, ()=>overlay, k=>overlay=k);
+buildChips("productBtns", PRODUCTS, ()=>product, k=>product=k);
+document.getElementById("windy").src = windyUrl();
+
+// ---------------- Données Open-Meteo ----------------
+const MODELS = [
+  ["meteofrance_arome_france_hd","AROME HD 1.5 km","#1B3A8C"],
+  ["meteofrance_arome_france","AROME 2.5 km","#5C7BD1"],
+  ["ecmwf_ifs","ECMWF IFS 9 km","#D4321A"],
+  ["icon_seamless","ICON (DWD)","#2E9E50"],
+  ["gfs_seamless","GFS (NOAA)","#9A6BD0"],
+];
+let charts = {};
+const fmtLab = t => { const d=new Date(t); return d.toLocaleDateString("fr-FR",{weekday:"short"})+" "+String(d.getHours()).padStart(2,"0")+"h"; };
+const st = (v,lim) => v==null ? null : (v>=lim?2:(v>=lim*WARN?1:0));
+const worst = (...a) => { const x=a.filter(v=>v!=null); return x.length?Math.max(...x):null; };
+const COL = {0:"var(--gbg)",1:"var(--abg)",2:"var(--rbg)"};
+
+function sunTimes(d){ // heures locales décimales (approx.)
+  const start=new Date(d.getFullYear(),0,0), doy=Math.floor((d-start)/864e5);
+  const decl=23.45*Math.sin((360/365*(doy-81))*Math.PI/180)*Math.PI/180;
+  const ha=Math.acos(Math.max(-1,Math.min(1,-Math.tan(LAT*Math.PI/180)*Math.tan(decl))))*180/Math.PI;
+  const B=(360/365*(doy-81))*Math.PI/180, eq=9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B);
+  const off=-new Date(d.getFullYear(),d.getMonth(),d.getDate(),12).getTimezoneOffset()/60;
+  const noon=12-LON/15-eq/60+off; return [noon-ha/15, noon+ha/15];
+}
+
+async function load(){
+  const err=document.getElementById("err"); err.style.display="none";
+  try{
+    const atmUrl = "https://api.open-meteo.com/v1/forecast?"+new URLSearchParams({
+      latitude:LAT, longitude:LON, timezone:TZ, wind_speed_unit:"ms", forecast_days:"7",
+      models: MODELS.map(m=>m[0]).join(","),
+      hourly:"wind_speed_10m,wind_gusts_10m,wind_direction_10m,cape,weather_code"});
+    const marUrl = "https://marine-api.open-meteo.com/v1/marine?"+new URLSearchParams({
+      latitude:LAT, longitude:LON, timezone:TZ, forecast_days:"7",
+      hourly:"wave_height,wave_peak_period,wave_period,swell_wave_height,wave_direction"});
+    const [a,m] = await Promise.all([fetch(atmUrl).then(r=>r.json()), fetch(marUrl).then(r=>r.json())]);
+    if(a.error) throw new Error("Open-Meteo : "+a.reason);
+    const H=a.hourly, T=H.time, M=m.hourly||{};
+    const now=new Date(); now.setMinutes(0,0,0);
+    const i0=Math.max(0,T.findIndex(t=>new Date(t)>=now));
+    const idx=[...Array(Math.min(168,T.length-i0)).keys()].map(k=>k+i0);
+    const labels=idx.map(i=>fmtLab(T[i]));
+    const get=(v,mod,i)=>{const arr=H[v+"_"+mod]; return arr? arr[i] : null;};
+    const pick=(v,i)=>{for(const mod of ["meteofrance_arome_france_hd","meteofrance_arome_france","ecmwf_ifs","icon_seamless","gfs_seamless"]){
+        const x=get(v,mod,i); if(x!=null) return [x,mod];} return [null,null];};
+    const mt=Object.fromEntries((M.time||[]).map((t,k)=>[t,k]));
+    const mv=(v,i)=>{const k=mt[T[i]]; return (k==null||!M[v])?null:M[v][k];};
+
+    // ---- Graphique vent
+    const ds=[];
+    MODELS.forEach(([mod,lab,c])=>{
+      const ws=idx.map(i=>get("wind_speed_10m",mod,i)), wg=idx.map(i=>get("wind_gusts_10m",mod,i));
+      if(ws.every(x=>x==null)) return;
+      ds.push({label:lab,data:ws,borderColor:c,backgroundColor:c,borderWidth:mod.startsWith("meteofrance")||mod==="ecmwf_ifs"?2:1.2,pointRadius:0,tension:.25,spanGaps:false});
+      ds.push({label:lab+" rafales",data:wg,borderColor:c,borderDash:[4,3],borderWidth:1,pointRadius:0,tension:.25,hidden:!(mod==="ecmwf_ifs"||mod==="meteofrance_arome_france_hd")});
+    });
+    ds.push({label:"Seuil rafale 15 m/s",data:idx.map(()=>LIM.wg10),borderColor:"#8E1B0E",borderDash:[2,2],borderWidth:1,pointRadius:0});
+    draw("cWind",labels,ds,"m/s");
+
+    // dispersion des modèles (vent moyen) sur 24 h / 72 h
+    const spreadAt=i=>{const v=MODELS.map(([mod])=>get("wind_speed_10m",mod,i)).filter(x=>x!=null); return v.length>1?Math.max(...v)-Math.min(...v):null;};
+    const avgSpread=n=>{const s=idx.slice(0,n).map(spreadAt).filter(x=>x!=null); return s.length?(s.reduce((p,c)=>p+c,0)/s.length):null;};
+    const s24=avgSpread(24), s72=avgSpread(72);
+    const conf=s=>s==null?"—":(s<2?"bon accord":s<4?"accord moyen":"désaccord marqué");
+    document.getElementById("spread").textContent =
+      `Écart moyen entre modèles (vent moyen) : ${s24!=null?s24.toFixed(1):"—"} m/s sur 24 h (${conf(s24)}) · ${s72!=null?s72.toFixed(1):"—"} m/s sur 72 h (${conf(s72)}).`;
+
+    // ---- Graphique vagues
+    draw("cWave",labels,[
+      {label:"Hs",data:idx.map(i=>mv("wave_height",i)),borderColor:"#1B3A8C",backgroundColor:"rgba(27,58,140,.15)",fill:true,borderWidth:2,pointRadius:0,tension:.25},
+      {label:"Houle",data:idx.map(i=>mv("swell_wave_height",i)),borderColor:"#5C7BD1",borderWidth:1,pointRadius:0,tension:.25},
+      {label:"Seuil Hs 1,5 m",data:idx.map(()=>LIM.hs),borderColor:"#D4321A",borderDash:[5,3],borderWidth:1.2,pointRadius:0},
+    ],"m");
+
+    // ---- Bandeau 72 h + KPI
+    const strip=document.getElementById("strip"), dl=document.getElementById("daylab");
+    const n72=Math.min(72,idx.length);
+    strip.style.gridTemplateColumns=`repeat(${n72},1fr)`; dl.style.gridTemplateColumns=`repeat(${n72},1fr)`;
+    strip.innerHTML=""; dl.innerHTML="";
+    let maxG=[0,null], maxH=[0,null], cntOK=0, firstOK=null, ltgMax=0;
+    for(let k=0;k<n72;k++){
+      const i=idx[k], d=new Date(T[i]);
+      const [g,src]=pick("wind_gusts_10m",i), hs=mv("wave_height",i);
+      const [cape]=pick("cape",i), [wc]=pick("weather_code",i);
+      const ltg = (wc!=null && [95,96,99].includes(wc)) ? 2 : st(cape,LIM.cape);
+      const s=worst(st(g,LIM.wg10),st(hs,LIM.hs),ltg);
+      const [rise,set]=sunTimes(d), hr=d.getHours()+.5, night=!(hr>=rise&&hr<=set);
+      if(g!=null&&g>maxG[0]) maxG=[g,d]; if(hs!=null&&hs>maxH[0]) maxH=[hs,d];
+      if(ltg!=null) ltgMax=Math.max(ltgMax,ltg);
+      if(s===0&&!night){cntOK++; if(!firstOK) firstOK=d;}
+      const c=document.createElement("div");
+      c.style.background = s==null?"#eee":COL[s]; if(night) c.style.filter="brightness(.88)";
+      c.title=`${d.toLocaleString("fr-FR",{weekday:"short",day:"2-digit",hour:"2-digit"})} — rafale ${g!=null?g.toFixed(0):"—"} m/s · Hs ${hs!=null?hs.toFixed(1):"—"} m · ${src||""}`;
+      if(d.getHours()%6===0) c.textContent=d.getHours();
+      strip.appendChild(c);
+      const l=document.createElement("div"); l.textContent = d.getHours()===12 ? d.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit"}) : ""; dl.appendChild(l);
+    }
+    const fmt=d=>d?d.toLocaleString("fr-FR",{weekday:"short",hour:"2-digit"}).replace(" ","&nbsp;"):"—";
+    document.getElementById("kpis").innerHTML = [
+      ["Rafale max 72 h", maxG[0].toFixed(0)+" m/s", (maxG[0]*1.944).toFixed(0)+" kn · "+fmt(maxG[1]), st(maxG[0],LIM.wg10)],
+      ["Hs max 72 h", maxH[0].toFixed(1)+" m", fmt(maxH[1]), st(maxH[0],LIM.hs)],
+      ["Heures de jour OK", cntOK+" h", "sur 72 h", cntOK>=12?0:cntOK>0?1:2],
+      ["Prochaine heure OK", firstOK?firstOK.toLocaleDateString("fr-FR",{weekday:"short"})+" "+firstOK.getHours()+"h":"—", "de jour, tous seuils", firstOK?0:2],
+    ].map(([t,v,s,stt])=>`<div class="kpi" style="border-top-color:${stt==null?"var(--navy)":["var(--g)","var(--a)","var(--r)"][stt]}"><div class="t">${t}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+
+    document.getElementById("updated").textContent = "Prévisions chargées le " + new Date().toLocaleString("fr-FR",{weekday:"long",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  }catch(e){
+    err.textContent="Impossible de charger les prévisions ("+e.message+"). Vérifiez la connexion internet puis cliquez sur « actualiser ».";
+    err.style.display="block";
+  }
+}
+
+function draw(id,labels,datasets,unit){
+  if(charts[id]) charts[id].destroy();
+  charts[id]=new Chart(document.getElementById(id),{type:"line",data:{labels,datasets},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{boxWidth:12,font:{size:10},filter:(it,data)=>!/rafales$/.test(it.text)||!data.datasets[it.datasetIndex].hidden}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+": "+(c.parsed.y==null?"—":c.parsed.y.toFixed(1))+" "+unit}}},
+      scales:{x:{ticks:{maxTicksLimit:14,font:{size:10}},grid:{color:"#EEF1F6"}},
+              y:{beginAtZero:true,ticks:{font:{size:10}},grid:{color:"#EEF1F6"},title:{display:true,text:unit,font:{size:10}}}}}});
+}
+
+document.getElementById("refresh").onclick=e=>{e.preventDefault(); load(); document.getElementById("windy").src=windyUrl();};
+load();
+setInterval(load, 30*60*1000);
+</script>
+</body>
+</html>
