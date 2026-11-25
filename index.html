@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EolMed MetOcean Live — carte & comparaison des modèles</title>
+<title>EolMed MetOcean Live — carte, synthèse & comparaison des modèles</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{--navy:#1B3A8C;--navyd:#12285F;--red:#D4321A;--sky:#E8EEF8;--grey:#F4F6FA;--line:#C9D3E6;--text:#1E2433;--muted:#6B7385;
@@ -42,6 +42,16 @@
   .chartbox{position:relative;height:250px}
   .muted{color:var(--muted)} .small{font-size:11px}
   .err{background:var(--rbg);color:#8E1B0E;padding:8px 12px;font-size:12px;display:none}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .daily td,.daily th{text-align:center;padding:5px 6px;font-size:11.5px;white-space:nowrap}
+  .daily td:first-child,.daily th:first-child{text-align:left;color:var(--navy);font-weight:600;background:var(--sky)}
+  .daily .mx{font-size:10px;color:var(--muted)}
+  .verdict{font-weight:700}
+  .eph{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;margin-bottom:8px}
+  .eph b{color:var(--navy)}
+  .help{font-size:11.5px;color:var(--text);line-height:1.55}
+  .help dt{font-weight:700;color:var(--navy);margin-top:6px}
+  .help dd{margin:0 0 2px 0}
   footer{font-size:11px;color:var(--muted);padding:10px 18px 20px;max-width:1500px;margin:0 auto}
   a{color:var(--navy)}
 </style>
@@ -71,20 +81,26 @@
     <!-- DROITE -->
     <div style="display:flex;flex-direction:column;gap:16px">
       <section class="card">
-        <h2>Prochaines 72 h sur le site <span class="hint">vert = tous seuils OK</span></h2>
+        <h2>Prochaines 72 h sur le site <span class="hint">vert = tous seuils OK · heures travaillées 06h–18h</span></h2>
         <div class="pad">
+          <div class="eph" id="eph"></div>
           <div class="kpis" id="kpis"></div>
           <div class="strip" id="strip"></div>
           <div class="daylab" id="daylab"></div>
           <div class="legend">
-            Seuils : Hs &lt; 1,5 m · rafale 10 m &lt; 15 m/s · foudre (CAPE ≥ 1000 J/kg ou code orage).
+            Seuils : Hs &lt; 1,5 m · rafale 20 m &lt; 15 m/s · vent moyen 120 m &lt; 10 m/s · foudre (CAPE ≥ 1000 J/kg ou code orage).
             <span class="sw" style="background:var(--gbg)"></span>OK
             <span class="sw" style="background:var(--abg)"></span>≥ 80 % d'un seuil
             <span class="sw" style="background:var(--rbg)"></span>seuil atteint
-            <span class="sw" style="background:#E5E8EF"></span>nuit (grisé)<br>
-            Même logique que le rapport PDF ; vent : AROME HD → AROME → ECMWF selon l'échéance.
+            <span class="sw" style="background:#E5E8EF"></span>hors heures travaillées (grisé)<br>
+            Même logique que le rapport PDF v3 ; vent : AROME HD → AROME → ECMWF selon l'échéance.
           </div>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>Vent à 20 m et 120 m <span class="hint">m/s · modèle de référence, extrapolé (voir « Comment lire »)</span></h2>
+        <div class="pad"><div class="chartbox"><canvas id="cHeight"></canvas></div></div>
       </section>
 
       <section class="card">
@@ -94,13 +110,32 @@
       </section>
 
       <section class="card">
-        <h2>Mer — hauteur significative Hs <span class="hint">m · Météo-France MFWAM</span></h2>
+        <h2>Mer — Hs, houle et limite MOSS <span class="hint">m · Météo-France MFWAM</span></h2>
         <div class="pad"><div class="chartbox" style="height:200px"><canvas id="cWave"></canvas></div></div>
       </section>
     </div>
   </div>
 
   <div class="err" id="err"></div>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Synthèse 7 jours — heures travaillées 06h–18h <span class="hint">vent = moyenne (max) · même calcul que le rapport PDF</span></h2>
+    <div style="overflow-x:auto"><table class="daily" id="daily"></table></div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>Comment lire cette page</h2>
+    <div class="pad help"><dl>
+      <dt>Heures travaillées</dt><dd>Tous les calculs (synthèse, heures exploitables, verdict) portent sur les heures 06h00–18h00 ; le reste est grisé.</dd>
+      <dt>Heures exploitables (ex. 5 h / 12)</dt><dd>Nombre d'heures entre 06h et 18h où <b>tous</b> les seuils sont respectés en même temps.</dd>
+      <dt>Verdict</dt><dd><b>GO</b> = au moins 4 heures consécutives exploitables · <b>FENÊTRE COURTE</b> = moins de 4 h · <b>NO-GO</b> = aucune heure. Aide à la décision : le go/no-go final reste au coordinateur marine.</dd>
+      <dt>Vent en hauteur (extrapolation)</dt><dd>Les modèles donnent le vent à 10 m et 100 m. Le vent à 20 m et 120 m est calculé avec un profil en loi de puissance calé sur ces deux niveaux :
+        V(z) = V100 × (z/100)<sup>α</sup> au-dessus de 100 m, V(z) = V10 × (z/10)<sup>α</sup> en dessous, avec α = ln(V100/V10)/ln(10) (borné 0,02–0,35 ; 0,12 par défaut).
+        Rafale en hauteur = vent moyen × facteur de rafale à 10 m, atténué avec la hauteur ((10/z)<sup>0,25</sup>).</dd>
+      <dt>MOSS</dt><dd>Hs prévue en % de la Hs maximale d'exploitation pour la période pic Tp prévue (Table 18 « Max Operating Sea states » : 3,40 m à Tp ≤ 8 s, 4,50 m à 10 s, 3,60 m à 11 s, 2,59 m à 12 s, 1,91 m à 13 s, 1,09 m à 15 s). Orange ≥ 80 %, rouge ≥ 100 %.</dd>
+      <dt>Directions</dt><dd>Direction d'où vient le vent / la mer, en degrés (0 = nord, 90 = est, 270 = ouest). Ex. « ONO (292°) » = vent d'ouest-nord-ouest.</dd>
+    </dl></div>
+  </section>
 
   <section class="card" style="margin-top:16px">
     <h2>Modèles utilisés</h2>
@@ -128,7 +163,20 @@
 
 <script>
 const LAT = 43.023, LON = 3.32, TZ = "Europe/Paris";
-const LIM = {hs:1.5, wg10:15, cape:1000};
+const LIM = {hs:1.5, wg10:15, wgL:15, wsH:10, cape:1000};
+const ZL = 20, ZH = 120, WORK = [6,18];
+const MOSS = [[0,3.40],[8,3.60],[8.5,3.70],[9,3.95],[9.5,4.30],[10,4.50],[10.5,4.45],[11,3.60],[12,2.59],[13,1.91],[15,1.09]];
+const mossLim = tp => { if(tp==null) return null; if(tp<=MOSS[0][0]) return MOSS[0][1];
+  for(let k=0;k<MOSS.length-1;k++){const [t0,h0]=MOSS[k],[t1,h1]=MOSS[k+1]; if(tp>=t0&&tp<=t1) return h0+(h1-h0)*(tp-t0)/(t1-t0);}
+  return MOSS[MOSS.length-1][1]; };
+const alpha = (a,b) => (a==null||b==null||a<1||b<=0) ? 0.12 : Math.max(0.02,Math.min(0.35,Math.log(b/a)/Math.log(10)));
+const windAt = (a,b,z) => (b!=null&&z>=100) ? b*Math.pow(z/100,alpha(a,b)) : (a==null?null:a*Math.pow(z/10,alpha(a,b)));
+const gustAt = (a,g,w,z) => { if(w==null) return null; if(a==null||g==null||a<0.5) return w*1.25;
+  const gf=Math.max(1,Math.min(2.2,g/a)); return w*(1+(gf-1)*Math.pow(10/z,0.25)); };
+const isWork = d => d.getHours()>=WORK[0] && d.getHours()<WORK[1];
+const CARD = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"];
+const card = deg => deg==null?"—":CARD[Math.floor(((deg%360)+11.25)/22.5)%16];
+const hhmm = h => { let H=Math.floor(h), m=Math.round((h-H)*60); if(m===60){H++;m=0;} return String(H).padStart(2,"0")+":"+String(m).padStart(2,"0"); };
 const WARN = 0.8;
 
 // ---------------- Carte Windy ----------------
@@ -181,12 +229,12 @@ async function load(){
   const err=document.getElementById("err"); err.style.display="none";
   try{
     const atmUrl = "https://api.open-meteo.com/v1/forecast?"+new URLSearchParams({
-      latitude:LAT, longitude:LON, timezone:TZ, wind_speed_unit:"ms", forecast_days:"7",
+      latitude:LAT, longitude:LON, timezone:TZ, wind_speed_unit:"ms", forecast_days:"8",
       models: MODELS.map(m=>m[0]).join(","),
-      hourly:"wind_speed_10m,wind_gusts_10m,wind_direction_10m,cape,weather_code"});
+      hourly:"wind_speed_10m,wind_gusts_10m,wind_direction_10m,wind_speed_100m,cape,weather_code"});
     const marUrl = "https://marine-api.open-meteo.com/v1/marine?"+new URLSearchParams({
-      latitude:LAT, longitude:LON, timezone:TZ, forecast_days:"7",
-      hourly:"wave_height,wave_peak_period,wave_period,swell_wave_height,wave_direction"});
+      latitude:LAT, longitude:LON, timezone:TZ, forecast_days:"8",
+      hourly:"wave_height,wave_peak_period,wave_period,swell_wave_height,swell_wave_period,wind_wave_height,wind_wave_period,wave_direction,sea_surface_temperature"});
     const [a,m] = await Promise.all([fetch(atmUrl).then(r=>r.json()), fetch(marUrl).then(r=>r.json())]);
     if(a.error) throw new Error("Open-Meteo : "+a.reason);
     const H=a.hourly, T=H.time, M=m.hourly||{};
@@ -199,6 +247,23 @@ async function load(){
         const x=get(v,mod,i); if(x!=null) return [x,mod];} return [null,null];};
     const mt=Object.fromEntries((M.time||[]).map((t,k)=>[t,k]));
     const mv=(v,i)=>{const k=mt[T[i]]; return (k==null||!M[v])?null:M[v][k];};
+    const ORDER=["meteofrance_arome_france_hd","meteofrance_arome_france","ecmwf_ifs","icon_seamless","gfs_seamless"];
+    const ROW = i => {   // même logique que le rapport : 1er modèle disponible, vent 10/100 m du même modèle
+      let mod=ORDER.find(md=>get("wind_speed_10m",md,i)!=null)||null;
+      const ws10=mod?get("wind_speed_10m",mod,i):null, wg10=mod?get("wind_gusts_10m",mod,i):null, ws100=mod?get("wind_speed_100m",mod,i):null;
+      const wsL=windAt(ws10,ws100,ZL), wsH=windAt(ws10,ws100,ZH), wgL=gustAt(ws10,wg10,wsL,ZL);
+      const hs=mv("wave_height",i);
+      let tp=mv("wave_peak_period",i);
+      if(tp==null){const sw=mv("swell_wave_height",i)||0, ww=mv("wind_wave_height",i)||0; tp= sw>=ww?mv("swell_wave_period",i):mv("wind_wave_period",i);}
+      const ml=mossLim(tp), moss=(hs!=null&&ml)?hs/ml:null;
+      const [cape]=pick("cape",i), [wc]=pick("weather_code",i);
+      const ltg=(wc!=null&&[95,96,99].includes(wc))?2:st(cape,LIM.cape);
+      const d=new Date(T[i]);
+      const sts={hs:st(hs,LIM.hs),wgL:st(wgL,LIM.wgL),wsH:st(wsH,LIM.wsH),ltg};
+      return {i,d,mod,ws10,wg10,wsL,wgL,wsH,hs,tp,ml,moss,ltg,sst:mv("sea_surface_temperature",i),dir:pick("wind_direction_10m",i)[0],
+              work:isWork(d),sts,status:worst(sts.hs,sts.wgL,sts.wsH,ltg)};
+    };
+    const R = idx.map(ROW);
 
     // ---- Graphique vent
     const ds=[];
@@ -224,37 +289,86 @@ async function load(){
       {label:"Hs",data:idx.map(i=>mv("wave_height",i)),borderColor:"#1B3A8C",backgroundColor:"rgba(27,58,140,.15)",fill:true,borderWidth:2,pointRadius:0,tension:.25},
       {label:"Houle",data:idx.map(i=>mv("swell_wave_height",i)),borderColor:"#5C7BD1",borderWidth:1,pointRadius:0,tension:.25},
       {label:"Seuil Hs 1,5 m",data:idx.map(()=>LIM.hs),borderColor:"#D4321A",borderDash:[5,3],borderWidth:1.2,pointRadius:0},
+      {label:"Limite MOSS (Hs max selon Tp)",data:R.map(r=>r.ml),borderColor:"#7B3FA0",borderDash:[6,2,2,2],borderWidth:1.2,pointRadius:0},
     ],"m");
 
-    // ---- Bandeau 72 h + KPI
+    // ---- Graphique vent 20 m / 120 m
+    draw("cHeight",labels,[
+      {label:"Vent moyen 20 m",data:R.map(r=>r.wsL),borderColor:"#1B3A8C",backgroundColor:"rgba(27,58,140,.10)",fill:true,borderWidth:2,pointRadius:0,tension:.25},
+      {label:"Rafale 20 m",data:R.map(r=>r.wgL),borderColor:"#1B3A8C",borderDash:[4,3],borderWidth:1,pointRadius:0,tension:.25},
+      {label:"Vent moyen 120 m",data:R.map(r=>r.wsH),borderColor:"#D4321A",borderWidth:2,pointRadius:0,tension:.25},
+      {label:"Seuil rafale 20 m (15 m/s)",data:idx.map(()=>LIM.wgL),borderColor:"#12285F",borderDash:[2,2],borderWidth:1,pointRadius:0},
+      {label:"Seuil vent 120 m (10 m/s)",data:idx.map(()=>LIM.wsH),borderColor:"#D4321A",borderDash:[2,2],borderWidth:1,pointRadius:0},
+    ],"m/s");
+
+    // ---- Bandeau 72 h
     const strip=document.getElementById("strip"), dl=document.getElementById("daylab");
-    const n72=Math.min(72,idx.length);
+    const n72=Math.min(72,R.length);
     strip.style.gridTemplateColumns=`repeat(${n72},1fr)`; dl.style.gridTemplateColumns=`repeat(${n72},1fr)`;
     strip.innerHTML=""; dl.innerHTML="";
-    let maxG=[0,null], maxH=[0,null], cntOK=0, firstOK=null, ltgMax=0;
     for(let k=0;k<n72;k++){
-      const i=idx[k], d=new Date(T[i]);
-      const [g,src]=pick("wind_gusts_10m",i), hs=mv("wave_height",i);
-      const [cape]=pick("cape",i), [wc]=pick("weather_code",i);
-      const ltg = (wc!=null && [95,96,99].includes(wc)) ? 2 : st(cape,LIM.cape);
-      const s=worst(st(g,LIM.wg10),st(hs,LIM.hs),ltg);
-      const [rise,set]=sunTimes(d), hr=d.getHours()+.5, night=!(hr>=rise&&hr<=set);
-      if(g!=null&&g>maxG[0]) maxG=[g,d]; if(hs!=null&&hs>maxH[0]) maxH=[hs,d];
-      if(ltg!=null) ltgMax=Math.max(ltgMax,ltg);
-      if(s===0&&!night){cntOK++; if(!firstOK) firstOK=d;}
+      const r=R[k], d=r.d;
       const c=document.createElement("div");
-      c.style.background = s==null?"#eee":COL[s]; if(night) c.style.filter="brightness(.88)";
-      c.title=`${d.toLocaleString("fr-FR",{weekday:"short",day:"2-digit",hour:"2-digit"})} — rafale ${g!=null?g.toFixed(0):"—"} m/s · Hs ${hs!=null?hs.toFixed(1):"—"} m · ${src||""}`;
+      c.style.background = r.status==null?"#eee":COL[r.status]; if(!r.work) c.style.filter="brightness(.86)";
+      c.title=`${d.toLocaleString("fr-FR",{weekday:"short",day:"2-digit",hour:"2-digit"})} — rafale 20 m ${r.wgL!=null?r.wgL.toFixed(0):"—"} m/s · vent 120 m ${r.wsH!=null?r.wsH.toFixed(0):"—"} m/s · Hs ${r.hs!=null?r.hs.toFixed(1):"—"} m · MOSS ${r.moss!=null?Math.round(r.moss*100)+" %":"—"}${r.work?"":" · hors heures travaillées"}`;
       if(d.getHours()%6===0) c.textContent=d.getHours();
       strip.appendChild(c);
       const l=document.createElement("div"); l.textContent = d.getHours()===12 ? d.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit"}) : ""; dl.appendChild(l);
     }
-    const fmt=d=>d?d.toLocaleString("fr-FR",{weekday:"short",hour:"2-digit"}).replace(" ","&nbsp;"):"—";
+
+    // ---- Synthèse journalière (heures travaillées)
+    const byDay=[]; R.forEach(r=>{const key=r.d.toDateString(); let g=byDay.find(x=>x.key===key); if(!g){g={key,d:r.d,rows:[]};byDay.push(g);} g.rows.push(r);});
+    const avg=a=>{const x=a.filter(v=>v!=null); return x.length?x.reduce((p,c)=>p+c,0)/x.length:null;};
+    const max=a=>{const x=a.filter(v=>v!=null); return x.length?Math.max(...x):null;};
+    const days=byDay.slice(0,7).map(g=>{
+      const w=g.rows.filter(r=>r.work), [rise,set]=sunTimes(g.d);
+      let best=0,cur=0; w.forEach(r=>{ if(r.status===0){cur++;best=Math.max(best,cur);} else cur=0; });
+      return {d:g.d,rise,set,n:w.length,ok:w.filter(r=>r.status===0).length,best,
+        hs:max(w.map(r=>r.hs)),moss:max(w.map(r=>r.moss)),
+        wgL:avg(w.map(r=>r.wgL)),wgLx:max(w.map(r=>r.wgL)),wsH:avg(w.map(r=>r.wsH)),wsHx:max(w.map(r=>r.wsH)),
+        wsL:avg(w.map(r=>r.wsL)),sst:avg(w.map(r=>r.sst)),ltg:max(w.map(r=>r.ltg)),
+        verdict:!w.length?null:(best>=4?"GO":best>0?"FENÊTRE COURTE":"NO-GO")};
+    });
+    const f0=x=>x==null?"—":x.toFixed(0), f1=x=>x==null?"—":x.toFixed(1);
+    const td=(txt,stt)=>`<td style="background:${stt==null?"var(--grey)":COL[stt]}">${txt}</td>`;
+    const VC={"GO":0,"FENÊTRE COURTE":1,"NO-GO":2};
+    const rowsD=[
+      ["Lever / coucher", d=>td(hhmm(d.rise)+" / "+hhmm(d.set),null)],
+      ["Verdict (≥ 4 h consécutives OK)", d=>td(d.verdict?`<span class="verdict">${d.verdict}</span>`:"—",d.verdict?VC[d.verdict]:null)],
+      ["Heures exploitables", d=>td(d.n?`${d.ok} h / ${d.n}`:"—",d.n?(d.ok>=6?0:d.ok>0?1:2):null)],
+      ["Hs max (m)", d=>td(f1(d.hs),st(d.hs,LIM.hs))],
+      ["MOSS : Hs / Hs max(Tp)", d=>td(d.moss==null?"—":Math.round(d.moss*100)+" %",d.moss==null?null:st(d.moss,1))],
+      ["Rafale 20 m moy. (max) m/s", d=>td(d.wgL==null?"—":`${f0(d.wgL)} <span class="mx">(${f0(d.wgLx)})</span>`,st(d.wgL,LIM.wgL))],
+      ["Vent 120 m moy. (max) m/s", d=>td(d.wsH==null?"—":`${f0(d.wsH)} <span class="mx">(${f0(d.wsHx)})</span>`,st(d.wsH,LIM.wsH))],
+      ["Température de l'eau (°C)", d=>td(f1(d.sst),null)],
+      ["Foudre", d=>td(d.ltg==null?"—":["NIL / faible","modéré","risque d'orage"][d.ltg],d.ltg)],
+    ];
+    document.getElementById("daily").innerHTML =
+      "<tr><th>Jour</th>"+days.map(d=>`<th>${d.d.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit",month:"2-digit"})}</th>`).join("")+"</tr>"+
+      rowsD.map(([lab,fn])=>`<tr><td>${lab}</td>${days.map(fn).join("")}</tr>`).join("");
+
+    // ---- Éphémérides + KPI (prochaines heures travaillées sur 24 h)
+    const today=new Date(), tom=new Date(today.getTime()+864e5);
+    const [r0,s0]=sunTimes(today), [r1,s1]=sunTimes(tom), dlh=s0-r0;
+    document.getElementById("eph").innerHTML =
+      `<span>☀︎ Aujourd'hui : lever <b>${hhmm(r0)}</b> · coucher <b>${hhmm(s0)}</b> · durée du jour <b>${Math.floor(dlh)}h${String(Math.round((dlh%1)*60)).padStart(2,"0")}</b></span>`+
+      `<span class="muted">Demain : ${hhmm(r1)} / ${hhmm(s1)}</span><span>Heures travaillées : <b>06h–18h</b></span>`;
+    const W24=R.slice(0,24).filter(r=>r.work), K=W24.length?W24:R.slice(0,24);
+    const kL=avg(K.map(r=>r.wsL)), kG=avg(K.map(r=>r.wgL)), kGx=max(K.map(r=>r.wgL)), kH=avg(K.map(r=>r.wsH)), kHx=max(K.map(r=>r.wsH));
+    const kHs=max(K.map(r=>r.hs)), kM=max(K.map(r=>r.moss)), kT=avg(K.map(r=>r.sst));
+    const dirs=K.map(r=>r.dir).filter(x=>x!=null);
+    const mdir=dirs.length?((Math.atan2(dirs.reduce((p,c)=>p+Math.sin(c*Math.PI/180),0),dirs.reduce((p,c)=>p+Math.cos(c*Math.PI/180),0))*180/Math.PI)+360)%360:null;
+    const per=K.length?K[0].d.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit"})+" 06–18h":"";
+    const dT=days.find(d=>d.d.toDateString()===today.toDateString()), dM=days.find(d=>d.d.toDateString()===tom.toDateString());
     document.getElementById("kpis").innerHTML = [
-      ["Rafale max 72 h", maxG[0].toFixed(0)+" m/s", (maxG[0]*1.944).toFixed(0)+" kn · "+fmt(maxG[1]), st(maxG[0],LIM.wg10)],
-      ["Hs max 72 h", maxH[0].toFixed(1)+" m", fmt(maxH[1]), st(maxH[0],LIM.hs)],
-      ["Heures de jour OK", cntOK+" h", "sur 72 h", cntOK>=12?0:cntOK>0?1:2],
-      ["Prochaine heure OK", firstOK?firstOK.toLocaleDateString("fr-FR",{weekday:"short"})+" "+firstOK.getHours()+"h":"—", "de jour, tous seuils", firstOK?0:2],
+      ["Vent moyen 20 m (moy.)", f0(kL)+" m/s", `${per} · de ${card(mdir)}${mdir!=null?" ("+Math.round(mdir)+"°)":""}`, null],
+      ["Rafale 20 m (moy.)", f0(kG)+" m/s", `max ${f0(kGx)} · seuil 15`, st(kG,LIM.wgL)],
+      ["Vent moyen 120 m (moy.)", f0(kH)+" m/s", `max ${f0(kHx)} · seuil 10`, st(kH,LIM.wsH)],
+      ["Hs max", f1(kHs)+" m", `seuil 1,5 m · MOSS ${kM!=null?Math.round(kM*100)+" %":"—"}`, worst(st(kHs,LIM.hs),kM==null?null:st(kM,1))],
+      ["Température de l'eau", f1(kT)+" °C", "surface · MFWAM", null],
+      ["Heures exploitables", `${dT&&dT.n?dT.ok:"—"} h | ${dM&&dM.n?dM.ok:"—"} h`, "aujourd'hui | demain · sur 12 h (06–18h)", dM?(dM.ok>=6?0:dM.ok>0?1:2):null],
+      ["Verdict demain", dM&&dM.verdict?dM.verdict:"—", "≥ 4 h consécutives OK = GO", dM&&dM.verdict?VC[dM.verdict]:null],
+      ["Écart entre modèles 24 h", s24!=null?s24.toFixed(1)+" m/s":"—", conf(s24), s24==null?null:(s24<2?0:s24<4?1:2)],
     ].map(([t,v,s,stt])=>`<div class="kpi" style="border-top-color:${stt==null?"var(--navy)":["var(--g)","var(--a)","var(--r)"][stt]}"><div class="t">${t}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
     document.getElementById("updated").textContent = "Prévisions chargées le " + new Date().toLocaleString("fr-FR",{weekday:"long",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
