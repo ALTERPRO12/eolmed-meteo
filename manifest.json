@@ -1,12 +1,12 @@
 {
-  "name": "EolMed MetOcean Live",
-  "short_name": "EolMed Météo",
-  "description": "Prévisions météo-océaniques du site EolMed : GO / NO-GO, vent 20/120 m, vagues, MOSS.",
+  "name": "Eolmet",
+  "short_name": "Eolmet",
+  "description": "Météo offshore du site EolMed : GO / NO-GO, vent 20/120 m, vagues, MOSS.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#1B3A8C",
+  "background_color": "#ffffff",
   "theme_color": "#1B3A8C",
   "lang": "fr",
   "icons": [
@@ -14,13 +14,13 @@
       "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
