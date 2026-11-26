@@ -1,0 +1,24 @@
+# Évite la mise en pause automatique des tâches planifiées par GitHub (après 60 jours sans activité sur un dépôt public).
+# Une fois par mois, enregistre la date dans .github/derniere_activite.txt.
+name: Maintien actif
+
+on:
+  schedule:
+    - cron: "17 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  maintien:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/derniere_activite.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/derniere_activite.txt
+          git commit -m "Maintien actif des tâches planifiées" || exit 0
+          git push
