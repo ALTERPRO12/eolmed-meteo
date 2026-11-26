@@ -1,13 +1,13 @@
 # Rapport météo-océanique EolMed — envoi automatique depuis GitHub (aucun ordinateur allumé nécessaire)
-# Heures d'envoi (Paris) : ~05:30, 11:30, 16:30, 21:30. GitHub peut retarder un départ de quelques minutes.
-# Secrets à créer (Settings > Secrets and variables > Actions) :
-#   EOLMED_SMTP_SERVER, EOLMED_SMTP_PORT, EOLMED_SMTP_USER, EOLMED_SMTP_PASSWORD, EOLMED_EMAIL_TO
+# Créneaux (heure de Paris, été comme hiver) : 05:30, 11:30, 16:30, 21:30.
+# GitHub vérifie toutes les 30 min (à :07 et :37). Le rapport d'un créneau part au premier passage
+# après l'heure du créneau, une seule fois (marqueur "envoi-AAAAMMJJ-HHMM"), et au plus tard 3 h après.
+# Secrets : EOLMED_SMTP_SERVER, EOLMED_SMTP_PORT, EOLMED_SMTP_USER, EOLMED_SMTP_PASSWORD, EOLMED_EMAIL_TO
 name: Rapport météo EolMed
 
 on:
   schedule:
-    - cron: "25 4,10,15,20 * * *"   # heure d'hiver (Paris = UTC+1)
-    - cron: "25 3,9,14,19 * * *"    # heure d'été (Paris = UTC+2)
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -20,6 +20,10 @@ on:
         required: false
         default: ""
 
+permissions:
+  actions: read
+  contents: read
+
 concurrency:
   group: eolmed-report
   cancel-in-progress: false
@@ -29,19 +33,41 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       go: ${{ steps.c.outputs.go }}
+      marker: ${{ steps.c.outputs.marker }}
     steps:
       - id: c
         env:
-          SCHED: ${{ github.event.schedule }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MODE: ${{ inputs.mode }}
+          TEST_TO: ${{ inputs.to }}
         run: |
-          off=$(TZ=Europe/Paris date +%z)
-          go=true
-          if [ -n "$SCHED" ]; then
-            if [ "$off" = "+0100" ] && [ "$SCHED" != "25 4,10,15,20 * * *" ]; then go=false; fi
-            if [ "$off" = "+0200" ] && [ "$SCHED" != "25 3,9,14,19 * * *" ]; then go=false; fi
+          now=$(TZ=Europe/Paris date +%H%M); day=$(TZ=Europe/Paris date +%Y%m%d)
+          m=$((10#${now:0:2}*60 + 10#${now:2:2}))
+          slot=""
+          for s in 2130 1630 1130 0530; do
+            if [ "$m" -ge $((10#${s:0:2}*60 + 10#${s:2:2})) ]; then slot=$s; break; fi
+          done
+          late=9999
+          if [ -n "$slot" ]; then late=$((m - (10#${slot:0:2}*60 + 10#${slot:2:2}))); fi
+          marker=""
+          if [ -n "$slot" ]; then marker="envoi-$day-$slot"; fi
+          deja=0
+          if [ -n "$marker" ]; then
+            deja=$(curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/actions/artifacts?name=$marker" | jq -r '.total_count // 0')
           fi
-          echo "Décalage Paris $off, planification '$SCHED' -> go=$go"
+          go=false
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            go=true
+            # un envoi manuel à la liste complète compte pour le créneau en cours
+            if [ "$MODE" != "send" ] || [ -n "$TEST_TO" ] || [ "$late" -gt 180 ]; then marker=""; fi
+          elif [ -n "$slot" ] && [ "$late" -le 180 ] && [ "$deja" = "0" ]; then
+            go=true
+          fi
+          echo "Paris $day $now | créneau=${slot:-aucun} | retard=${late} min | déjà envoyé=$deja | go=$go | marqueur=${marker:-aucun}"
           echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "marker=$marker" >> "$GITHUB_OUTPUT"
 
   rapport:
     needs: creneau
@@ -80,6 +106,15 @@ jobs:
             sleep 90
           done
           exit 1
+      - name: Marquer le créneau comme envoyé
+        if: success() && needs.creneau.outputs.marker != ''
+        run: echo "${{ needs.creneau.outputs.marker }} $(date -u)" > marqueur.txt
+      - uses: actions/upload-artifact@v4
+        if: success() && needs.creneau.outputs.marker != ''
+        with:
+          name: ${{ needs.creneau.outputs.marker }}
+          path: marqueur.txt
+          retention-days: 5
       - uses: actions/upload-artifact@v4
         if: always()
         with:
