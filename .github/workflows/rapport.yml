@@ -1,6 +1,7 @@
 # Rapport météo-océanique EolMed — envoi automatique depuis GitHub (aucun ordinateur allumé nécessaire)
 # Créneaux (heure de Paris, été comme hiver) : 05:30, 11:30, 16:30, 21:30.
-# GitHub vérifie toutes les 30 min (à :07 et :37). Le rapport d'un créneau part au premier passage
+# Déclenchement à l'heure exacte par cron-job.org (workflow_dispatch avec auto=true),
+# et en secours par le planificateur GitHub (toutes les 30 min, souvent retardé). Le rapport d'un créneau part au premier passage
 # après l'heure du créneau, une seule fois (marqueur "envoi-AAAAMMJJ-HHMM"), et au plus tard 3 h après.
 # Secrets : EOLMED_SMTP_SERVER, EOLMED_SMTP_PORT, EOLMED_SMTP_USER, EOLMED_SMTP_PASSWORD, EOLMED_EMAIL_TO
 name: Rapport météo EolMed
@@ -19,6 +20,10 @@ on:
         description: "Destinataire(s) de test, séparés par des virgules (vide = liste complète)"
         required: false
         default: ""
+      auto:
+        description: "Déclenchement horaire externe (cron-job.org) : envoie seulement si le créneau n'est pas déjà parti"
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -41,6 +46,7 @@ jobs:
           REPO: ${{ github.repository }}
           MODE: ${{ inputs.mode }}
           TEST_TO: ${{ inputs.to }}
+          AUTO: ${{ inputs.auto }}
         run: |
           now=$(TZ=Europe/Paris date +%H%M); day=$(TZ=Europe/Paris date +%Y%m%d)
           m=$((10#${now:0:2}*60 + 10#${now:2:2}))
@@ -58,7 +64,7 @@ jobs:
               "https://api.github.com/repos/$REPO/actions/artifacts?name=$marker" | jq -r '.total_count // 0')
           fi
           go=false
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$AUTO" != "true" ]; then
             go=true
             # un envoi manuel à la liste complète compte pour le créneau en cours
             if [ "$MODE" != "send" ] || [ -n "$TEST_TO" ] || [ "$late" -gt 180 ]; then marker=""; fi
@@ -96,7 +102,7 @@ jobs:
           TEST_TO: ${{ inputs.to }}
         run: |
           args=()
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$AUTO" != "true" ]; then
             if [ "$MODE" = "pdf-only" ]; then args+=(--pdf-only); fi
             if [ -n "$TEST_TO" ]; then args+=(--to "$TEST_TO"); fi
           fi
